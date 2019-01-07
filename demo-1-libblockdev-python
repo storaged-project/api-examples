@@ -13,6 +13,11 @@ from gi.repository import BlockDev as bd
 REQUESTED_PLUGIN_NAMES = {"lvm", "swap", "crypto", "fs"}
 
 requested_plugins = bd.plugin_specs_from_names(REQUESTED_PLUGIN_NAMES)
+
+# disable checks for runtime dependencies during init -- thanks to this init
+# won't fail if for example 'mke2fs' is not installed
+bd.switch_init_checks(False)
+
 try:
     succ_ = bd.init(requested_plugins)
 except GLib.GError as err:

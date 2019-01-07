@@ -283,6 +283,15 @@ int main (int argc, char *argv[]) {
   BDPluginSpec *plugins[] = {&crypto_plugin, &fs_plugin, &lvm_plugin,
                              &swap_plugin, NULL};
 
+  /* disable checks for runtime dependencies during init -- thanks to this init
+     won't fail if for example 'mke2fs' is not installed */
+  ret = bd_switch_init_checks (FALSE, &error);
+  if (!ret) {
+    g_print ("Error disabling dependencies checks during init: %s (%s, %d)\n",
+             error->message, g_quark_to_string (error->domain), error->code);
+    return 1;
+  }
+
   /* initialize the library (if it isn't already initialized) and load
      all required modules
    */
