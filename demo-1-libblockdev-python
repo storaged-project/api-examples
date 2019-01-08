@@ -13,6 +13,11 @@ from gi.repository import BlockDev as bd
 REQUESTED_PLUGIN_NAMES = {"lvm", "swap", "crypto", "fs"}
 
 requested_plugins = bd.plugin_specs_from_names(REQUESTED_PLUGIN_NAMES)
+
+# disable checks for runtime dependencies during init -- thanks to this init
+# won't fail if for example 'mke2fs' is not installed
+bd.switch_init_checks(False)
+
 try:
     succ_ = bd.init(requested_plugins)
 except GLib.GError as err:
@@ -111,14 +116,14 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 3:
         print("Requires at least two arguments!", file=sys.stderr)
-        print("Usage: %s [--cleanup] DISK1 DISK2", sys.argv[0], file=sys.stderr)
+        print("Usage: %s [--cleanup] DISK1 DISK2" % sys.argv[0], file=sys.stderr)
         exit(1)
 
     cleanup = False
     if "--cleanup" in sys.argv:
         if len(sys.argv) < 4:
             print("--cleanup requires disks to clean!", file=sys.stderr)
-            print("Usage: %s [--cleanup] DISK1 DISK2", sys.argv[0], file=sys.stderr)
+            print("Usage: %s [--cleanup] DISK1 DISK2" % sys.argv[0], file=sys.stderr)
             exit(1)
         cleanup = True
         sys.argv.remove("--cleanup")
