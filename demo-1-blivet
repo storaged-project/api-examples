@@ -30,7 +30,7 @@ def get_vg_name():
 def get_blivet_obj(device_paths):
     """ Return a blivet.Blivet instance with disk filter appropriate for this demo. """
     blivet_obj = Blivet()
-    blivet_obj.config.exclusive_disks = [os.path.basename(d) for d in device_paths]
+    blivet_obj.exclusive_disks = [os.path.basename(d) for d in device_paths]
     blivet_obj.encryption_passphrase = LUKS_PASSPHRASE
     blivet_obj.reset()
     blivet_obj.devicetree.teardown_all()
