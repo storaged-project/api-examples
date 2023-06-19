@@ -5,7 +5,7 @@ import os
 
 import gi
 gi.require_version("GLib", "2.0")
-gi.require_version("BlockDev", "2.0")
+gi.require_version("BlockDev", "3.0")
 
 from gi.repository import GLib
 from gi.repository import BlockDev as bd
@@ -13,10 +13,6 @@ from gi.repository import BlockDev as bd
 REQUESTED_PLUGIN_NAMES = {"lvm", "swap", "crypto", "fs"}
 
 requested_plugins = bd.plugin_specs_from_names(REQUESTED_PLUGIN_NAMES)
-
-# disable checks for runtime dependencies during init -- thanks to this init
-# won't fail if for example 'mke2fs' is not installed
-bd.switch_init_checks(False)
 
 try:
     succ_ = bd.init(requested_plugins)
@@ -77,8 +73,9 @@ def create_setup(disk1, disk2, demo_name=sys.argv[0]):
 
     # create the LUKS format on the data LV and open (unlock) it
     lv_path = "/dev/%s/%s" % (vg_name, DATA_LV_NAME)
-    bd.crypto.luks_format(lv_path, passphrase=PASSPHRASE)
-    bd.crypto.luks_open(lv_path, LUKS_PREFIX + DATA_LV_NAME, PASSPHRASE)
+    context = bd.CryptoKeyslotContext(passphrase=PASSPHRASE)
+    bd.crypto.luks_format(lv_path, context=context)
+    bd.crypto.luks_open(lv_path, LUKS_PREFIX + DATA_LV_NAME, context=context)
 
     # create an XFS file system on the LUKS device
     luks_path = "/dev/mapper/" + LUKS_PREFIX + DATA_LV_NAME
