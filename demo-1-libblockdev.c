@@ -14,18 +14,21 @@
 #define DATALABEL "demodata"
 #define LUKSNAME "test-luks"
 #define PASSPHRASE "passphrase"
+#define PASS_LEN 10
 
 #define MIB * 1024 * 1024
 #define GIB * 1024 MIB
 
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(BDLVMVGdata, bd_lvm_vgdata_free)
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(BDCryptoKeyslotContext, bd_crypto_keyslot_context_free)
 
 
 static gboolean create_storage (const gchar **disks, GError **error) {
   gboolean ret = FALSE;
   gchar input;
   g_autoptr(BDLVMVGdata) vg_data = NULL;
+  g_autoptr(BDCryptoKeyslotContext) context = NULL;
   g_autofree gchar *lv_path = NULL;
   g_autofree gchar *luks_name = NULL;
   g_autofree gchar *luks_path = NULL;
@@ -41,7 +44,8 @@ static gboolean create_storage (const gchar **disks, GError **error) {
   /* wipe given disks and create LVM PV "format" on them */
   for (disk_p = disks; *disk_p != NULL; disk_p++) {
     ret = bd_fs_wipe (*disk_p,
-                      TRUE, /* wipe all signatures */
+                      TRUE,  /* wipe all signatures */
+                      FALSE, /* force -- do not wipe mounted devices */
                       error);
     if (!ret) {
       /* wipefs fails when the device is already empty but we have a special
@@ -96,6 +100,7 @@ static gboolean create_storage (const gchar **disks, GError **error) {
 
   lv_path = g_strdup_printf ("/dev/%s/%s", VGNAME, SWAPNAME);
   ret = bd_swap_mkswap (lv_path, SWAPLABEL,
+                        NULL, /* optional UUID for the swap */
                         NULL, /* extra options passed to the lvm tool */
                         error);
   if (!ret) {
@@ -123,13 +128,20 @@ static gboolean create_storage (const gchar **disks, GError **error) {
     return FALSE;
   }
 
+  context = bd_crypto_keyslot_context_new_passphrase (PASSPHRASE, PASS_LEN, error);
+  if (!ret) {
+    g_prefix_error (error, "Error when creating keyslot context: ");
+    return FALSE;
+  }
+
   lv_path = g_strdup_printf ("/dev/%s/%s", VGNAME, DATANAME);
   ret = bd_crypto_luks_format (lv_path,
-                               NULL, /* cipher specification, NULL for default value */
-                               0,    /* key size in bits, 0 for default */
-                               PASSPHRASE,
-                               NULL, /* key file, NULL if not requested */
-                               0,    /* minimum random data entropy */
+                               NULL,    /* cipher specification, NULL for default value */
+                               0,       /* key size in bits, 0 for default */
+                               context, /* passphrase initialized keyslot context */
+                               0,       /* minimum random data entropy */
+                               BD_CRYPTO_LUKS_VERSION_LUKS2,
+                               NULL,    /* LUKS format extra options */
                                error);
   if (!ret) {
     g_prefix_error (error, "Error when creating luks on %s: ", lv_path);
@@ -137,9 +149,9 @@ static gboolean create_storage (const gchar **disks, GError **error) {
   }
 
   luks_name = g_strdup_printf ("%s-%s", LUKSNAME, DATANAME);
-  ret = bd_crypto_luks_open (lv_path, luks_name, PASSPHRASE,
-                             NULL,  /* key file, NULL if not requested */
-                             FALSE, /* open as read-only */
+  ret = bd_crypto_luks_open (lv_path, luks_name,
+                             context, /* passphrase initialized keyslot context */
+                             FALSE,   /* open as read-only */
                              error);
   if (!ret) {
     g_prefix_error (error, "Error when opening luks on %s: ", lv_path);
@@ -282,15 +294,6 @@ int main (int argc, char *argv[]) {
 
   BDPluginSpec *plugins[] = {&crypto_plugin, &fs_plugin, &lvm_plugin,
                              &swap_plugin, NULL};
-
-  /* disable checks for runtime dependencies during init -- thanks to this init
-     won't fail if for example 'mke2fs' is not installed */
-  ret = bd_switch_init_checks (FALSE, &error);
-  if (!ret) {
-    g_print ("Error disabling dependencies checks during init: %s (%s, %d)\n",
-             error->message, g_quark_to_string (error->domain), error->code);
-    return 1;
-  }
 
   /* initialize the library (if it isn't already initialized) and load
      all required modules
